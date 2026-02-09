@@ -1,4 +1,4 @@
-import 'package:budgetfy/widgets/welcome.dart';
+import 'package:budgetfy/widgets/welcome/welcome.dart';
 import 'package:flutter/material.dart';
 
 class Home extends StatelessWidget {
