@@ -21,7 +21,7 @@ class _SplashState extends State<Splash> {
     });
 
     Future.delayed(const Duration(milliseconds: 2000), () {
-      Navigator.pushReplacementNamed(context, '/home');
+      if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
     });
   }
 

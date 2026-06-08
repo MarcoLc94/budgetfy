@@ -20,8 +20,7 @@ class Card4 extends StatelessWidget {
           SizedBox(height: 50),
           ElevatedButton(
             onPressed: () {
-              // Aquí navegas a Home
-              Navigator.pushReplacementNamed(context, '/home');
+              Navigator.pushReplacementNamed(context, '/dashboard');
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Color(0xFF92E3A9),

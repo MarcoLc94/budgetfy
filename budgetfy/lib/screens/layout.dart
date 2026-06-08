@@ -1,5 +1,7 @@
-import 'package:budgetfy/screens/home.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/finance_provider.dart';
+import 'dashboard.dart';
 
 class Layout extends StatefulWidget {
   const Layout({super.key});
@@ -9,11 +11,16 @@ class Layout extends StatefulWidget {
 }
 
 class _LayoutState extends State<Layout> {
-  int _index = 0;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<FinanceProvider>().loadYear(DateTime.now().year);
+    });
+  }
 
-  final _pages = const [Home()];
   @override
   Widget build(BuildContext context) {
-    return Container();
+    return const Dashboard();
   }
 }

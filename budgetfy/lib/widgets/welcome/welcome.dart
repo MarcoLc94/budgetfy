@@ -13,7 +13,6 @@ class Welcome extends StatefulWidget {
 
 class _WelcomeState extends State<Welcome> {
   int _currentPage = 0;
-  final PageController _controller = PageController();
 
   final List<Widget> _cards = const [Card1(), Card2(), Card3(), Card4()];
 
