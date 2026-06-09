@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 class Card4 extends StatelessWidget {
-  const Card4({super.key});
+  final VoidCallback? onFinish;
+  const Card4({super.key, this.onFinish});
 
   @override
   Widget build(BuildContext context) {
@@ -17,16 +18,13 @@ class Card4 extends StatelessWidget {
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 16, color: Colors.white70, height: 1.5),
           ),
-          SizedBox(height: 50),
+          const SizedBox(height: 50),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/dashboard');
-            },
+            onPressed: onFinish,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFF92E3A9),
-              // amarillo contraste
-              foregroundColor: Color(0xFF673BB7), // texto morado
-              padding: EdgeInsets.symmetric(horizontal: 50, vertical: 16),
+              backgroundColor: const Color(0xFF92E3A9),
+              foregroundColor: const Color(0xFF673BB7),
+              padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 16),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

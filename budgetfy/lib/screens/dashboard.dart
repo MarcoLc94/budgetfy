@@ -5,6 +5,7 @@ import '../core/app_theme.dart';
 import '../models/transaction.dart';
 import '../providers/finance_provider.dart';
 import '../widgets/common/add_transaction_sheet.dart';
+import 'day_detail.dart';
 import 'month_detail.dart';
 
 const _monthsShort = [
@@ -19,6 +20,9 @@ const _monthsFull = [
 
 const _dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 
+const _neutralBlue = Color(0xFF3D7BF4);
+const _weekendAmber = Color(0xFFFFB347);
+
 enum _ViewMode { monthly, weekly }
 
 class Dashboard extends StatefulWidget {
@@ -29,7 +33,7 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  _ViewMode _viewMode = _ViewMode.monthly;
+  _ViewMode _viewMode = _ViewMode.weekly;
 
   // Summary card
   late PageController _summaryController;
@@ -92,7 +96,9 @@ class _DashboardState extends State<Dashboard> {
           body: CustomScrollView(
             slivers: [
               _buildAppBar(finance, weeks, controller),
-              SliverToBoxAdapter(child: _buildSummaryCard(finance)),
+              SliverToBoxAdapter(
+                child: _buildSummaryCard(finance, weeks),
+              ),
               if (_viewMode == _ViewMode.monthly)
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
@@ -105,16 +111,18 @@ class _DashboardState extends State<Dashboard> {
                 ),
             ],
           ),
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: () => AddTransactionSheet.show(context, finance),
-            backgroundColor: AppColors.primaryPurple,
-            foregroundColor: Colors.white,
-            icon: const Icon(Icons.add),
-            label: const Text(
-              'Agregar',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
+          floatingActionButton: _viewMode == _ViewMode.monthly
+              ? FloatingActionButton.extended(
+                  onPressed: () => AddTransactionSheet.show(context, finance),
+                  backgroundColor: AppColors.primaryPurple,
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.add),
+                  label: const Text(
+                    'Agregar',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                )
+              : null,
         );
       },
     );
@@ -198,7 +206,12 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildSummaryCard(FinanceProvider finance) {
+  Widget _buildSummaryCard(FinanceProvider finance, List<WeekData> weeks) {
+    if (_viewMode == _ViewMode.weekly && weeks.isNotEmpty) {
+      return _buildWeeklySummaryCard(weeks);
+    }
+
+    // Monthly mode — swipeable 12-month card
     final yearBalance = finance.yearBalance;
     final isYearPositive = yearBalance >= 0;
 
@@ -215,7 +228,8 @@ class _DashboardState extends State<Dashboard> {
               final monthData = finance.getMonthData(month);
               final monthBalance = monthData.balance;
               final isPositive = monthBalance >= 0;
-              final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+              final fmt =
+                  NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
               return Container(
                 margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
@@ -301,6 +315,97 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  Widget _buildWeeklySummaryCard(List<WeekData> weeks) {
+    final week = weeks[_currentWeekIndex];
+    // Use Thursday to determine the representative month (ISO standard)
+    final thursday = week.start.add(const Duration(days: 3));
+    final monthName = _monthsFull[thursday.month - 1].toUpperCase();
+    final year = thursday.year;
+
+    // Week range label
+    final startDay = week.start.day;
+    final endDay = week.end.day;
+    final startMonth = _monthsFull[week.start.month - 1].toLowerCase();
+    final endMonth = _monthsFull[week.end.month - 1].toLowerCase();
+    final rangeLabel = week.start.month == week.end.month
+        ? '$startDay — $endDay de $startMonth'
+        : '$startDay $startMonth — $endDay $endMonth';
+
+    final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primaryPurple.withValues(alpha: 0.8),
+            AppColors.primaryPurple.withValues(alpha: 0.4),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'Semana',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const Spacer(),
+              const Icon(
+                Icons.calendar_view_week_outlined,
+                color: Colors.white30,
+                size: 14,
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            monthName,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.5,
+            ),
+          ),
+          Text(
+            '$year',
+            style: const TextStyle(color: Colors.white54, fontSize: 13),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            rangeLabel,
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              _SummaryPill(
+                icon: Icons.arrow_upward_rounded,
+                label: 'Ingresos',
+                value: fmt.format(week.income),
+                color: AppColors.incomeGreen,
+              ),
+              const SizedBox(width: 12),
+              _SummaryPill(
+                icon: Icons.arrow_downward_rounded,
+                label: 'Gastos',
+                value: fmt.format(week.expenses),
+                color: AppColors.expenseRed,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMonthGrid(FinanceProvider finance) {
     final now = DateTime.now();
     return SliverGrid(
@@ -358,7 +463,7 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-// ─── Week month label in app bar ────────────────────────────────────────────
+// ─── Week month label in app bar ─────────────────────────────────────────────
 
 class _WeekMonthLabel extends StatelessWidget {
   final List<WeekData> weeks;
@@ -376,7 +481,6 @@ class _WeekMonthLabel extends StatelessWidget {
   String get _label {
     if (weeks.isEmpty) return '';
     final week = weeks[currentIndex];
-    // Use Thursday of the week to determine the month (ISO standard)
     final thursday = week.start.add(const Duration(days: 3));
     return '${_monthsFull[thursday.month - 1]} ${thursday.year}';
   }
@@ -424,7 +528,7 @@ class _WeekMonthLabel extends StatelessWidget {
   }
 }
 
-// ─── Week page (7 day rows) ──────────────────────────────────────────────────
+// ─── Week page (7 day cards) ─────────────────────────────────────────────────
 
 class _WeekPage extends StatelessWidget {
   final WeekData week;
@@ -452,7 +556,7 @@ class _WeekPage extends StatelessWidget {
           return Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
-              child: _DayRow(
+              child: _DayCard(
                 date: date,
                 transactions: dayTxs,
                 isToday: isToday,
@@ -465,14 +569,14 @@ class _WeekPage extends StatelessWidget {
   }
 }
 
-// ─── Day row ─────────────────────────────────────────────────────────────────
+// ─── Day card ─────────────────────────────────────────────────────────────────
 
-class _DayRow extends StatelessWidget {
+class _DayCard extends StatelessWidget {
   final DateTime date;
   final List<Transaction> transactions;
   final bool isToday;
 
-  const _DayRow({
+  const _DayCard({
     required this.date,
     required this.transactions,
     required this.isToday,
@@ -485,150 +589,124 @@ class _DayRow extends StatelessWidget {
       transactions.where((t) => !t.isIncome).fold(0.0, (s, t) => s + t.amount);
 
   double get balance => income - expenses;
-  bool get hasData => transactions.isNotEmpty;
+
+  bool get isWeekend => date.weekday == 6 || date.weekday == 7;
+
+  Color _bgColor(bool isToday) {
+    if (isToday) return AppColors.primaryPurple.withValues(alpha: 0.15);
+    if (balance > 0) return AppColors.incomeGreen.withValues(alpha: 0.08);
+    if (balance < 0) return AppColors.expenseRed.withValues(alpha: 0.08);
+    return _neutralBlue.withValues(alpha: 0.07);
+  }
+
+  Color _borderColor(bool isToday) {
+    if (isToday) return AppColors.primaryPurple;
+    if (balance > 0) return AppColors.incomeGreen.withValues(alpha: 0.45);
+    if (balance < 0) return AppColors.expenseRed.withValues(alpha: 0.45);
+    return _neutralBlue.withValues(alpha: 0.3);
+  }
+
+  Color _balanceColor() {
+    if (balance > 0) return AppColors.incomeGreen;
+    if (balance < 0) return AppColors.expenseRed;
+    return _neutralBlue;
+  }
 
   @override
   Widget build(BuildContext context) {
     final fmt = NumberFormat.compactCurrency(symbol: '\$', decimalDigits: 0);
-    final isPositive = balance >= 0;
-    final finance = context.read<FinanceProvider>();
+    final dayNameColor =
+        isToday ? AppColors.mintGreen : (isWeekend ? _weekendAmber : AppColors.textSecondary);
 
     return GestureDetector(
-      onTap: () => AddTransactionSheet.show(context, finance, initialDate: date),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => DayDetail(date: date)),
+      ),
       child: AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      decoration: BoxDecoration(
-        color: isToday
-            ? AppColors.primaryPurple.withValues(alpha: 0.15)
-            : AppColors.cardBg,
-        borderRadius: BorderRadius.circular(12),
-        border: isToday
-            ? Border.all(color: AppColors.primaryPurple, width: 1.5)
-            : null,
-      ),
-      child: Row(
-        children: [
-          // ── Día ──
-          SizedBox(
-            width: 52,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _dayNames[date.weekday - 1],
-                  style: TextStyle(
-                    color: isToday ? AppColors.mintGreen : AppColors.textSecondary,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                Row(
-                  children: [
-                    Text(
-                      '${date.day}',
-                      style: TextStyle(
-                        color: isToday ? Colors.white : AppColors.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        height: 1.1,
-                      ),
-                    ),
-                    const SizedBox(width: 3),
-                    Text(
-                      _monthsShort[date.month - 1],
-                      style: const TextStyle(
-                        color: AppColors.textSecondary,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: _bgColor(isToday),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: _borderColor(isToday),
+            width: isToday ? 1.5 : 1.0,
           ),
-          const SizedBox(width: 12),
-          // ── Centro: ingresos, gastos y barra ──
-          Expanded(
-            child: hasData
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          _MiniStat(
-                            icon: Icons.arrow_upward_rounded,
-                            value: fmt.format(income),
-                            color: AppColors.incomeGreen,
-                          ),
-                          const SizedBox(width: 10),
-                          _MiniStat(
-                            icon: Icons.arrow_downward_rounded,
-                            value: fmt.format(expenses),
-                            color: AppColors.expenseRed,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 5),
-                      _DayBar(income: income, expenses: expenses),
-                    ],
-                  )
-                : const Text(
-                    'Sin movimientos',
+        ),
+        child: Row(
+          children: [
+            // Day name + number
+            SizedBox(
+              width: 52,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _dayNames[date.weekday - 1],
                     style: TextStyle(
-                      color: AppColors.divider,
+                      color: dayNameColor,
                       fontSize: 11,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-          ),
-          const SizedBox(width: 12),
-          // ── Balance ──
-          Text(
-            hasData
-                ? '${isPositive ? '+' : ''}${fmt.format(balance)}'
-                : '—',
-            style: TextStyle(
-              color: hasData
-                  ? (isPositive ? AppColors.incomeGreen : AppColors.expenseRed)
-                  : AppColors.divider,
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${date.day}',
+                        style: TextStyle(
+                          color: isToday ? Colors.white : AppColors.textPrimary,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          height: 1.1,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(
+                          _monthsShort[date.month - 1],
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
-      ),
-    ));
-  }
-}
-
-class _DayBar extends StatelessWidget {
-  final double income;
-  final double expenses;
-  const _DayBar({required this.income, required this.expenses});
-
-  @override
-  Widget build(BuildContext context) {
-    final total = income + expenses;
-    if (total == 0) return const SizedBox.shrink();
-    final fraction = (income / total).clamp(0.0, 1.0);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: Stack(
-        children: [
-          Container(height: 3, color: AppColors.expenseRed.withValues(alpha: 0.3)),
-          FractionallySizedBox(
-            widthFactor: fraction,
-            child: Container(height: 3, color: AppColors.incomeGreen),
-          ),
-        ],
+            const Spacer(),
+            // Balance
+            Text(
+              transactions.isEmpty
+                  ? '—'
+                  : '${balance >= 0 ? '+' : ''}${fmt.format(balance)}',
+              style: TextStyle(
+                color: transactions.isEmpty
+                    ? AppColors.divider
+                    : _balanceColor(),
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right,
+              color: AppColors.divider,
+              size: 16,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// ─── Month dots indicator ────────────────────────────────────────────────────
+// ─── Month dots indicator ─────────────────────────────────────────────────────
 
 class _MonthDots extends StatelessWidget {
   final int currentIndex;
@@ -646,9 +724,7 @@ class _MonthDots extends StatelessWidget {
           width: isActive ? 16 : 5,
           height: 5,
           decoration: BoxDecoration(
-            color: isActive
-                ? AppColors.mintGreen
-                : AppColors.divider,
+            color: isActive ? AppColors.mintGreen : AppColors.divider,
             borderRadius: BorderRadius.circular(3),
           ),
         );
@@ -657,7 +733,7 @@ class _MonthDots extends StatelessWidget {
   }
 }
 
-// ─── Shared widgets ──────────────────────────────────────────────────────────
+// ─── Shared widgets ───────────────────────────────────────────────────────────
 
 class _YearSelector extends StatelessWidget {
   final FinanceProvider finance;
@@ -704,7 +780,9 @@ class _ArrowBtn extends StatelessWidget {
         width: 32,
         height: 32,
         decoration: BoxDecoration(
-          color: onTap != null ? AppColors.cardBg : AppColors.cardBg.withValues(alpha: 0.4),
+          color: onTap != null
+              ? AppColors.cardBg
+              : AppColors.cardBg.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(8),
         ),
         child: Icon(
@@ -834,7 +912,9 @@ class _MonthCard extends StatelessWidget {
             ),
             const Spacer(),
             Text(
-              hasData ? '${isPositive ? '+' : ''}${fmt.format(balance)}' : '--',
+              hasData
+                  ? '${isPositive ? '+' : ''}${fmt.format(balance)}'
+                  : '--',
               style: TextStyle(
                 color: hasData
                     ? (isPositive ? AppColors.incomeGreen : AppColors.expenseRed)
@@ -876,7 +956,8 @@ class _MonthCard extends StatelessWidget {
       child: Stack(
         children: [
           Container(
-              height: 4, color: AppColors.expenseRed.withValues(alpha: 0.3)),
+              height: 4,
+              color: AppColors.expenseRed.withValues(alpha: 0.3)),
           FractionallySizedBox(
             widthFactor: incomeFraction,
             child: Container(height: 4, color: AppColors.incomeGreen),

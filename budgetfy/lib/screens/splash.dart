@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Splash extends StatefulWidget {
   const Splash({super.key});
@@ -9,19 +10,29 @@ class Splash extends StatefulWidget {
 
 class _SplashState extends State<Splash> {
   bool _visible = false;
+  bool? _onboardingDone;
 
   @override
   void initState() {
     super.initState();
 
+    // Fade in logo
     Future.delayed(const Duration(milliseconds: 500), () {
-      setState(() {
-        _visible = true;
-      });
+      if (mounted) setState(() => _visible = true);
     });
 
+    // Read onboarding flag in parallel (always ready before 2s)
+    SharedPreferences.getInstance().then((prefs) {
+      _onboardingDone = prefs.getBool('onboarding_done') ?? false;
+    });
+
+    // Navigate after splash
     Future.delayed(const Duration(milliseconds: 2000), () {
-      if (mounted) Navigator.pushReplacementNamed(context, '/welcome');
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(
+        context,
+        (_onboardingDone ?? false) ? '/dashboard' : '/welcome',
+      );
     });
   }
 
