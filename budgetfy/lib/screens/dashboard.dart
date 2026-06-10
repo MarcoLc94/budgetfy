@@ -208,7 +208,7 @@ class _DashboardState extends State<Dashboard> {
 
   Widget _buildSummaryCard(FinanceProvider finance, List<WeekData> weeks) {
     if (_viewMode == _ViewMode.weekly && weeks.isNotEmpty) {
-      return _buildWeeklySummaryCard(weeks);
+      return _buildWeeklySummaryCard(weeks, finance);
     }
 
     // Monthly mode — swipeable 12-month card
@@ -315,7 +315,7 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget _buildWeeklySummaryCard(List<WeekData> weeks) {
+  Widget _buildWeeklySummaryCard(List<WeekData> weeks, FinanceProvider finance) {
     final week = weeks[_currentWeekIndex];
     // Use Thursday to determine the representative month (ISO standard)
     final thursday = week.start.add(const Duration(days: 3));
@@ -330,6 +330,11 @@ class _DashboardState extends State<Dashboard> {
     final rangeLabel = week.start.month == week.end.month
         ? '$startDay — $endDay de $startMonth'
         : '$startDay $startMonth — $endDay $endMonth';
+
+    // Monthly balance for the representative month
+    final monthData = finance.getMonthData(thursday.month);
+    final monthBalance = monthData.balance;
+    final isPositive = monthBalance >= 0;
 
     final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
 
@@ -352,9 +357,9 @@ class _DashboardState extends State<Dashboard> {
         children: [
           Row(
             children: [
-              const Text(
-                'Semana',
-                style: TextStyle(color: Colors.white70, fontSize: 13),
+              Text(
+                'Balance — $monthName',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const Spacer(),
               const Icon(
@@ -364,24 +369,28 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
-            monthName,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 28,
+            '${isPositive ? '+' : ''}${fmt.format(monthBalance)}',
+            style: TextStyle(
+              color: isPositive ? AppColors.mintGreen : AppColors.expenseRed,
+              fontSize: 32,
               fontWeight: FontWeight.bold,
-              letterSpacing: 1.5,
             ),
           ),
-          Text(
-            '$year',
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
-          ),
           const SizedBox(height: 4),
-          Text(
-            rangeLabel,
-            style: const TextStyle(color: Colors.white38, fontSize: 11),
+          Row(
+            children: [
+              Text(
+                '$year',
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                rangeLabel,
+                style: const TextStyle(color: Colors.white38, fontSize: 11),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           Row(
@@ -389,14 +398,14 @@ class _DashboardState extends State<Dashboard> {
               _SummaryPill(
                 icon: Icons.arrow_upward_rounded,
                 label: 'Ingresos',
-                value: fmt.format(week.income),
+                value: fmt.format(monthData.income),
                 color: AppColors.incomeGreen,
               ),
               const SizedBox(width: 12),
               _SummaryPill(
                 icon: Icons.arrow_downward_rounded,
                 label: 'Gastos',
-                value: fmt.format(week.expenses),
+                value: fmt.format(monthData.expenses),
                 color: AppColors.expenseRed,
               ),
             ],

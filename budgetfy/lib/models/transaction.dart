@@ -1,3 +1,5 @@
+enum RecurringType { daily, weekly, monthly, custom }
+
 class Transaction {
   final int? id;
   final String description;
@@ -6,6 +8,8 @@ class Transaction {
   final DateTime date;
   final String category;
   final bool isRecurring;
+  final RecurringType recurringType;
+  final int recurringIntervalDays;
 
   const Transaction({
     this.id,
@@ -15,6 +19,8 @@ class Transaction {
     required this.date,
     this.category = 'General',
     this.isRecurring = false,
+    this.recurringType = RecurringType.monthly,
+    this.recurringIntervalDays = 7,
   });
 
   Map<String, dynamic> toMap() => {
@@ -25,6 +31,8 @@ class Transaction {
     'date': date.toIso8601String(),
     'category': category,
     'is_recurring': isRecurring ? 1 : 0,
+    'recurring_type': recurringType.name,
+    'recurring_interval': recurringIntervalDays,
   };
 
   factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
@@ -35,7 +43,12 @@ class Transaction {
     date: DateTime.parse(map['date'] as String),
     category: map['category'] as String? ?? 'General',
     isRecurring: map['is_recurring'] == 1,
+    recurringType: _parseType(map['recurring_type'] as String?),
+    recurringIntervalDays: (map['recurring_interval'] as int?) ?? 7,
   );
+
+  static RecurringType _parseType(String? value) => RecurringType.values
+      .firstWhere((e) => e.name == value, orElse: () => RecurringType.monthly);
 
   Transaction copyWith({
     int? id,
@@ -45,6 +58,8 @@ class Transaction {
     DateTime? date,
     String? category,
     bool? isRecurring,
+    RecurringType? recurringType,
+    int? recurringIntervalDays,
   }) => Transaction(
     id: id ?? this.id,
     description: description ?? this.description,
@@ -53,5 +68,7 @@ class Transaction {
     date: date ?? this.date,
     category: category ?? this.category,
     isRecurring: isRecurring ?? this.isRecurring,
+    recurringType: recurringType ?? this.recurringType,
+    recurringIntervalDays: recurringIntervalDays ?? this.recurringIntervalDays,
   );
 }

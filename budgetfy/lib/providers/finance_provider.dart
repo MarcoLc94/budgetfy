@@ -113,17 +113,61 @@ class FinanceProvider extends ChangeNotifier {
 
   Future<void> add(Transaction t) async {
     if (t.isRecurring) {
-      final year = t.date.year;
-      for (int month = 1; month <= 12; month++) {
-        final lastDay = DateTime(year, month + 1, 0).day;
-        final day = t.date.day.clamp(1, lastDay);
-        await DatabaseService.insertTransaction(
-          t.copyWith(date: DateTime(year, month, day)),
-        );
+      for (final date in _recurringDates(t)) {
+        await DatabaseService.insertTransaction(t.copyWith(date: date));
       }
     } else {
       await DatabaseService.insertTransaction(t);
     }
+    await loadYear(_year);
+  }
+
+  List<DateTime> _recurringDates(Transaction t) {
+    final year = t.date.year;
+    final start = DateTime(t.date.year, t.date.month, t.date.day);
+    final end = DateTime(year, 12, 31);
+
+    switch (t.recurringType) {
+      case RecurringType.daily:
+        final dates = <DateTime>[];
+        var d = start;
+        while (!d.isAfter(end)) {
+          dates.add(d);
+          d = d.add(const Duration(days: 1));
+        }
+        return dates;
+
+      case RecurringType.weekly:
+        final dates = <DateTime>[];
+        var d = start;
+        while (!d.isAfter(end)) {
+          dates.add(d);
+          d = d.add(const Duration(days: 7));
+        }
+        return dates;
+
+      case RecurringType.monthly:
+        return List.generate(12, (i) {
+          final month = i + 1;
+          final lastDay = DateTime(year, month + 1, 0).day;
+          final day = t.date.day.clamp(1, lastDay);
+          return DateTime(year, month, day);
+        });
+
+      case RecurringType.custom:
+        final interval = t.recurringIntervalDays > 0 ? t.recurringIntervalDays : 1;
+        final dates = <DateTime>[];
+        var d = start;
+        while (!d.isAfter(end)) {
+          dates.add(d);
+          d = d.add(Duration(days: interval));
+        }
+        return dates;
+    }
+  }
+
+  Future<void> update(Transaction t) async {
+    await DatabaseService.updateTransaction(t);
     await loadYear(_year);
   }
 

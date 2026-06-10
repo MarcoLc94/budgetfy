@@ -14,7 +14,7 @@ class DatabaseService {
     final dbPath = join(await getDatabasesPath(), 'budgetfy.db');
     return openDatabase(
       dbPath,
-      version: 2,
+      version: 3,
       onCreate: (db, _) => db.execute('''
         CREATE TABLE transactions(
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -23,13 +23,23 @@ class DatabaseService {
           is_income INTEGER NOT NULL,
           date TEXT NOT NULL,
           category TEXT NOT NULL,
-          is_recurring INTEGER NOT NULL DEFAULT 0
+          is_recurring INTEGER NOT NULL DEFAULT 0,
+          recurring_type TEXT NOT NULL DEFAULT 'monthly',
+          recurring_interval INTEGER NOT NULL DEFAULT 7
         )
       '''),
       onUpgrade: (db, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await db.execute(
             'ALTER TABLE transactions ADD COLUMN is_recurring INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (oldVersion < 3) {
+          await db.execute(
+            "ALTER TABLE transactions ADD COLUMN recurring_type TEXT NOT NULL DEFAULT 'monthly'",
+          );
+          await db.execute(
+            'ALTER TABLE transactions ADD COLUMN recurring_interval INTEGER NOT NULL DEFAULT 7',
           );
         }
       },
@@ -39,6 +49,16 @@ class DatabaseService {
   static Future<void> insertTransaction(Transaction t) async {
     final db = await _database;
     await db.insert('transactions', t.toMap());
+  }
+
+  static Future<void> updateTransaction(Transaction t) async {
+    final db = await _database;
+    await db.update(
+      'transactions',
+      t.toMap(),
+      where: 'id = ?',
+      whereArgs: [t.id],
+    );
   }
 
   static Future<List<Transaction>> getByYear(int year) async {

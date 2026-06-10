@@ -20,17 +20,20 @@ const _expenseCategories = [
 class AddTransactionSheet extends StatefulWidget {
   final FinanceProvider provider;
   final DateTime? initialDate;
+  final Transaction? initialTransaction;
 
   const AddTransactionSheet({
     super.key,
     required this.provider,
     this.initialDate,
+    this.initialTransaction,
   });
 
   static Future<void> show(
     BuildContext context,
     FinanceProvider provider, {
     DateTime? initialDate,
+    Transaction? initialTransaction,
   }) async {
     await showModalBottomSheet(
       context: context,
@@ -39,6 +42,7 @@ class AddTransactionSheet extends StatefulWidget {
       builder: (_) => AddTransactionSheet(
         provider: provider,
         initialDate: initialDate,
+        initialTransaction: initialTransaction,
       ),
     );
   }
@@ -50,22 +54,43 @@ class AddTransactionSheet extends StatefulWidget {
 class _AddTransactionSheetState extends State<AddTransactionSheet> {
   final _descController = TextEditingController();
   final _amountController = TextEditingController();
+  final _intervalController = TextEditingController(text: '7');
+
   bool _isIncome = false;
   late DateTime _selectedDate;
   String _selectedCategory = _expenseCategories.first;
   bool _isRecurring = false;
+  RecurringType _recurringType = RecurringType.monthly;
   bool _saving = false;
+
+  bool get _isEditMode => widget.initialTransaction != null;
 
   @override
   void initState() {
     super.initState();
-    _selectedDate = widget.initialDate ?? DateTime.now();
+    final t = widget.initialTransaction;
+    if (t != null) {
+      _descController.text = t.description;
+      _amountController.text = t.amount.toStringAsFixed(
+        t.amount.truncateToDouble() == t.amount ? 0 : 2,
+      );
+      _isIncome = t.isIncome;
+      _selectedDate = t.date;
+      final cats = t.isIncome ? _incomeCategories : _expenseCategories;
+      _selectedCategory = cats.contains(t.category) ? t.category : cats.first;
+      _isRecurring = t.isRecurring;
+      _recurringType = t.recurringType;
+      _intervalController.text = t.recurringIntervalDays.toString();
+    } else {
+      _selectedDate = widget.initialDate ?? DateTime.now();
+    }
   }
 
   @override
   void dispose() {
     _descController.dispose();
     _amountController.dispose();
+    _intervalController.dispose();
     super.dispose();
   }
 
@@ -108,17 +133,74 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
     }
 
     setState(() => _saving = true);
-    await widget.provider.add(
-      Transaction(
-        description: desc,
-        amount: amount,
-        isIncome: _isIncome,
-        date: _selectedDate,
-        category: _selectedCategory,
-        isRecurring: _isRecurring,
+
+    if (_isEditMode) {
+      await widget.provider.update(
+        widget.initialTransaction!.copyWith(
+          description: desc,
+          amount: amount,
+          isIncome: _isIncome,
+          date: _selectedDate,
+          category: _selectedCategory,
+        ),
+      );
+    } else {
+      final interval = int.tryParse(_intervalController.text) ?? 7;
+      await widget.provider.add(
+        Transaction(
+          description: desc,
+          amount: amount,
+          isIncome: _isIncome,
+          date: _selectedDate,
+          category: _selectedCategory,
+          isRecurring: _isRecurring,
+          recurringType: _recurringType,
+          recurringIntervalDays: interval > 0 ? interval : 1,
+        ),
+      );
+    }
+
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceBg,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Eliminar transacción',
+          style: TextStyle(color: AppColors.textPrimary),
+        ),
+        content: const Text(
+          '¿Estás seguro de que quieres eliminar esta transacción?',
+          style: TextStyle(color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Eliminar',
+              style: TextStyle(color: AppColors.expenseRed),
+            ),
+          ),
+        ],
       ),
     );
-    if (mounted) Navigator.of(context).pop();
+
+    if (confirmed == true && mounted) {
+      final id = widget.initialTransaction!.id;
+      if (id != null) await widget.provider.delete(id);
+      if (mounted) Navigator.of(context).pop();
+    }
   }
 
   @override
@@ -148,9 +230,9 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Agregar Transacción',
-              style: TextStyle(
+            Text(
+              _isEditMode ? 'Editar Transacción' : 'Agregar Transacción',
+              style: const TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -187,11 +269,25 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             ),
             const SizedBox(height: 12),
             _DateField(date: _selectedDate, onTap: _pickDate),
-            const SizedBox(height: 12),
-            _RecurringToggle(
-              value: _isRecurring,
-              onChanged: (v) => setState(() => _isRecurring = v),
-            ),
+            if (!_isEditMode) ...[
+              const SizedBox(height: 12),
+              _RecurringToggle(
+                value: _isRecurring,
+                onChanged: (v) => setState(() => _isRecurring = v),
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                child: _isRecurring
+                    ? _RecurringOptions(
+                        selectedType: _recurringType,
+                        onTypeChanged: (t) =>
+                            setState(() => _recurringType = t),
+                        intervalController: _intervalController,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ],
             const SizedBox(height: 16),
             const Text(
               'Categoría',
@@ -235,21 +331,41 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                         height: 22,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text(
-                        'Guardar',
-                        style: TextStyle(
+                    : Text(
+                        _isEditMode ? 'Actualizar' : 'Guardar',
+                        style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
               ),
             ),
+            if (_isEditMode) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: _saving ? null : _confirmDelete,
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    color: AppColors.expenseRed,
+                    size: 18,
+                  ),
+                  label: const Text(
+                    'Eliminar transacción',
+                    style: TextStyle(color: AppColors.expenseRed),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
     );
   }
 }
+
+// ─── Type toggle ──────────────────────────────────────────────────────────────
 
 class _TypeToggle extends StatelessWidget {
   final bool isIncome;
@@ -338,6 +454,8 @@ class _ToggleOption extends StatelessWidget {
   }
 }
 
+// ─── Date field ───────────────────────────────────────────────────────────────
+
 class _DateField extends StatelessWidget {
   final DateTime date;
   final VoidCallback onTap;
@@ -376,6 +494,8 @@ class _DateField extends StatelessWidget {
   }
 }
 
+// ─── Recurring toggle ─────────────────────────────────────────────────────────
+
 class _RecurringToggle extends StatelessWidget {
   final bool value;
   final void Function(bool) onChanged;
@@ -409,29 +529,13 @@ class _RecurringToggle extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Recurrente',
-                    style: TextStyle(
-                      color: value
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Text(
-                    'Se repite cada mes el mismo día',
-                    style: TextStyle(
-                      color: value
-                          ? AppColors.lightPurple
-                          : AppColors.divider,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+              child: Text(
+                'Recurrente',
+                style: TextStyle(
+                  color: value ? AppColors.textPrimary : AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 14,
+                ),
               ),
             ),
             Checkbox(
@@ -452,6 +556,127 @@ class _RecurringToggle extends StatelessWidget {
     );
   }
 }
+
+// ─── Recurring options (expanded when toggle is on) ───────────────────────────
+
+String _recurringLabel(RecurringType type) {
+  switch (type) {
+    case RecurringType.daily:
+      return 'Diario';
+    case RecurringType.weekly:
+      return 'Semanal';
+    case RecurringType.monthly:
+      return 'Mensual';
+    case RecurringType.custom:
+      return 'Personalizado';
+  }
+}
+
+class _RecurringOptions extends StatelessWidget {
+  final RecurringType selectedType;
+  final void Function(RecurringType) onTypeChanged;
+  final TextEditingController intervalController;
+
+  const _RecurringOptions({
+    required this.selectedType,
+    required this.onTypeChanged,
+    required this.intervalController,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 10),
+        Row(
+          children: RecurringType.values.map((type) {
+            final selected = selectedType == type;
+            return Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: GestureDetector(
+                  onTap: () => onTypeChanged(type),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    padding: const EdgeInsets.symmetric(vertical: 9),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? AppColors.primaryPurple.withValues(alpha: 0.2)
+                          : AppColors.cardBg,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: selected
+                            ? AppColors.primaryPurple.withValues(alpha: 0.7)
+                            : AppColors.divider,
+                      ),
+                    ),
+                    child: Text(
+                      _recurringLabel(type),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: selected
+                            ? AppColors.lightPurple
+                            : AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+        if (selectedType == RecurringType.custom) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Text(
+                'Cada',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 64,
+                height: 40,
+                child: TextField(
+                  controller: intervalController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    filled: true,
+                    fillColor: AppColors.cardBg,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'días',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 4),
+      ],
+    );
+  }
+}
+
+// ─── Category chip ────────────────────────────────────────────────────────────
 
 class _CategoryChip extends StatelessWidget {
   final String label;
