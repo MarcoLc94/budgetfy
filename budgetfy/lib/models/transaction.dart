@@ -1,5 +1,9 @@
 enum RecurringType { daily, weekly, monthly, custom }
 
+/// Nombre canónico de la categoría de ahorro: se guarda así en la BD sin
+/// importar el idioma de la interfaz.
+const kSavingsCategory = 'Ahorro';
+
 class Transaction {
   final int? id;
   final String description;
@@ -10,6 +14,7 @@ class Transaction {
   final bool isRecurring;
   final RecurringType recurringType;
   final int recurringIntervalDays;
+  final String? recurringGroupId;
 
   const Transaction({
     this.id,
@@ -21,6 +26,7 @@ class Transaction {
     this.isRecurring = false,
     this.recurringType = RecurringType.monthly,
     this.recurringIntervalDays = 7,
+    this.recurringGroupId,
   });
 
   Map<String, dynamic> toMap() => {
@@ -33,6 +39,7 @@ class Transaction {
     'is_recurring': isRecurring ? 1 : 0,
     'recurring_type': recurringType.name,
     'recurring_interval': recurringIntervalDays,
+    'recurring_group_id': recurringGroupId,
   };
 
   factory Transaction.fromMap(Map<String, dynamic> map) => Transaction(
@@ -45,6 +52,7 @@ class Transaction {
     isRecurring: map['is_recurring'] == 1,
     recurringType: _parseType(map['recurring_type'] as String?),
     recurringIntervalDays: (map['recurring_interval'] as int?) ?? 7,
+    recurringGroupId: map['recurring_group_id'] as String?,
   );
 
   static RecurringType _parseType(String? value) => RecurringType.values
@@ -60,6 +68,7 @@ class Transaction {
     bool? isRecurring,
     RecurringType? recurringType,
     int? recurringIntervalDays,
+    String? recurringGroupId,
   }) => Transaction(
     id: id ?? this.id,
     description: description ?? this.description,
@@ -70,5 +79,6 @@ class Transaction {
     isRecurring: isRecurring ?? this.isRecurring,
     recurringType: recurringType ?? this.recurringType,
     recurringIntervalDays: recurringIntervalDays ?? this.recurringIntervalDays,
+    recurringGroupId: recurringGroupId ?? this.recurringGroupId,
   );
 }

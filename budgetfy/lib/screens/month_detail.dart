@@ -1,15 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../core/app_strings.dart';
 import '../core/app_theme.dart';
 import '../models/transaction.dart';
 import '../providers/finance_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/common/add_transaction_sheet.dart';
-
-const _monthsFull = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
 
 class MonthDetail extends StatelessWidget {
   final int month;
@@ -19,6 +16,7 @@ class MonthDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     return Consumer<FinanceProvider>(
       builder: (context, finance, _) {
         final data = finance.getMonthData(month);
@@ -32,13 +30,13 @@ class MonthDetail extends StatelessWidget {
           appBar: AppBar(
             backgroundColor: AppColors.darkBg,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
                   color: AppColors.textPrimary),
               onPressed: () => Navigator.pop(context),
             ),
             title: Text(
-              '${_monthsFull[month - 1]} $year',
-              style: const TextStyle(
+              '${s.monthsFull[month - 1]} $year',
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontWeight: FontWeight.bold,
               ),
@@ -46,7 +44,7 @@ class MonthDetail extends StatelessWidget {
           ),
           body: Column(
             children: [
-              _buildMonthSummary(data, fmt),
+              _buildMonthSummary(s, data, fmt),
               Expanded(
                 child: data.isEmpty
                     ? _buildEmpty(context, finance)
@@ -76,7 +74,7 @@ class MonthDetail extends StatelessWidget {
     );
   }
 
-  Widget _buildMonthSummary(MonthData data, NumberFormat fmt) {
+  Widget _buildMonthSummary(Strings s, MonthData data, NumberFormat fmt) {
     final balance = data.balance;
     final isPositive = balance >= 0;
 
@@ -91,7 +89,7 @@ class MonthDetail extends StatelessWidget {
         children: [
           Expanded(
             child: _SummaryItem(
-              label: 'Ingresos',
+              label: s.income,
               value: fmt.format(data.income),
               color: AppColors.incomeGreen,
               icon: Icons.arrow_upward_rounded,
@@ -100,8 +98,8 @@ class MonthDetail extends StatelessWidget {
           Container(width: 1, height: 40, color: AppColors.divider),
           Expanded(
             child: _SummaryItem(
-              label: 'Gastos',
-              value: fmt.format(data.expenses),
+              label: s.expenses,
+              value: fmt.format(data.spending),
               color: AppColors.expenseRed,
               icon: Icons.arrow_downward_rounded,
             ),
@@ -109,7 +107,16 @@ class MonthDetail extends StatelessWidget {
           Container(width: 1, height: 40, color: AppColors.divider),
           Expanded(
             child: _SummaryItem(
-              label: 'Saldo',
+              label: s.savings,
+              value: fmt.format(data.savings),
+              color: AppColors.savingsBlue,
+              icon: Icons.savings_outlined,
+            ),
+          ),
+          Container(width: 1, height: 40, color: AppColors.divider),
+          Expanded(
+            child: _SummaryItem(
+              label: s.saldo,
               value: '${isPositive ? '+' : ''}${fmt.format(balance)}',
               color: isPositive ? AppColors.incomeGreen : AppColors.expenseRed,
               icon: Icons.account_balance_wallet_outlined,
@@ -121,23 +128,24 @@ class MonthDetail extends StatelessWidget {
   }
 
   Widget _buildEmpty(BuildContext context, FinanceProvider finance) {
+    final s = context.watch<SettingsProvider>().strings;
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
+          Icon(
             Icons.receipt_long_outlined,
             size: 64,
             color: AppColors.divider,
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Sin transacciones',
+          Text(
+            s.noTransactions,
             style: TextStyle(color: AppColors.textSecondary, fontSize: 16),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Agrega ingresos o gastos para este mes',
+          Text(
+            s.addForMonthHint,
             style: TextStyle(color: AppColors.divider, fontSize: 13),
           ),
           const SizedBox(height: 24),
@@ -148,7 +156,7 @@ class MonthDetail extends StatelessWidget {
               initialDate: DateTime(year, month),
             ),
             icon: const Icon(Icons.add),
-            label: const Text('Agregar transacción'),
+            label: Text(s.addTransaction),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primaryPurple,
               foregroundColor: Colors.white,
@@ -203,7 +211,7 @@ class _SummaryItem extends StatelessWidget {
         ),
         Text(
           label,
-          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
         ),
       ],
     );
@@ -218,6 +226,7 @@ class _DaySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
     final dayTotal = transactions.fold(
       0.0,
@@ -233,8 +242,8 @@ class _DaySection extends StatelessWidget {
           child: Row(
             children: [
               Text(
-                _formatDay(day),
-                style: const TextStyle(
+                _formatDay(s, day),
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -260,14 +269,8 @@ class _DaySection extends StatelessWidget {
     );
   }
 
-  String _formatDay(DateTime d) {
-    const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-    const months = [
-      'ene', 'feb', 'mar', 'abr', 'may', 'jun',
-      'jul', 'ago', 'sep', 'oct', 'nov', 'dic',
-    ];
-    return '${days[d.weekday - 1]}, ${d.day} ${months[d.month - 1]}';
-  }
+  String _formatDay(Strings s, DateTime d) =>
+      '${s.daysShort[d.weekday - 1]}, ${d.day} ${s.monthsShort[d.month - 1].toLowerCase()}';
 }
 
 class _TransactionTile extends StatelessWidget {
@@ -292,7 +295,7 @@ class _TransactionTile extends StatelessWidget {
           color: AppColors.expenseRed.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete_outline, color: AppColors.expenseRed),
+        child: Icon(Icons.delete_outline, color: AppColors.expenseRed),
       ),
       onDismissed: (_) {
         if (transaction.id != null) provider.delete(transaction.id!);
@@ -328,15 +331,18 @@ class _TransactionTile extends StatelessWidget {
                 children: [
                   Text(
                     transaction.description,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppColors.textPrimary,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                   Text(
-                    transaction.category,
-                    style: const TextStyle(
+                    context
+                        .watch<SettingsProvider>()
+                        .strings
+                        .categoryLabel(transaction.category),
+                    style: TextStyle(
                       color: AppColors.textSecondary,
                       fontSize: 12,
                     ),

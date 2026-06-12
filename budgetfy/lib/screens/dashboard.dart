@@ -1,24 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../core/app_strings.dart';
 import '../core/app_theme.dart';
 import '../models/transaction.dart';
 import '../providers/finance_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/common/add_transaction_sheet.dart';
 import 'day_detail.dart';
 import 'month_detail.dart';
-
-const _monthsShort = [
-  'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-  'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
-];
-
-const _monthsFull = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
-
-const _dayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+import 'month_type_detail.dart';
+import 'profile.dart';
+import 'recurring_list.dart';
+import 'settings.dart';
 
 const _neutralBlue = Color(0xFF3D7BF4);
 const _weekendAmber = Color(0xFFFFB347);
@@ -117,9 +111,9 @@ class _DashboardState extends State<Dashboard> {
                   backgroundColor: AppColors.primaryPurple,
                   foregroundColor: Colors.white,
                   icon: const Icon(Icons.add),
-                  label: const Text(
-                    'Agregar',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  label: Text(
+                    context.watch<SettingsProvider>().strings.add,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                 )
               : null,
@@ -134,20 +128,42 @@ class _DashboardState extends State<Dashboard> {
     PageController? controller,
   ) {
     final isMonthly = _viewMode == _ViewMode.monthly;
+    final settings = context.watch<SettingsProvider>();
+    final s = settings.strings;
     return SliverAppBar(
       backgroundColor: AppColors.darkBg,
       pinned: true,
       title: Row(
         children: [
-          const Text(
-            'Budgetfy',
-            style: TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
+          // Profile avatar
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ProfileScreen()),
+            ),
+            child: Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [AppColors.primaryPurple, AppColors.lightPurple],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                settings.aliasInitial,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
           GestureDetector(
             onTap: _toggleView,
             child: AnimatedContainer(
@@ -178,7 +194,7 @@ class _DashboardState extends State<Dashboard> {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    isMonthly ? 'Mensual' : 'Semanal',
+                    isMonthly ? s.monthly : s.weekly,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -189,6 +205,22 @@ class _DashboardState extends State<Dashboard> {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          _CircleBtn(
+            icon: Icons.repeat_rounded,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const RecurringList()),
+            ),
+          ),
+          const SizedBox(width: 6),
+          _CircleBtn(
+            icon: Icons.settings_outlined,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
             ),
           ),
           const Spacer(),
@@ -210,6 +242,9 @@ class _DashboardState extends State<Dashboard> {
     if (_viewMode == _ViewMode.weekly && weeks.isNotEmpty) {
       return _buildWeeklySummaryCard(weeks, finance);
     }
+
+    final settings = context.watch<SettingsProvider>();
+    final s = settings.strings;
 
     // Monthly mode — swipeable 12-month card
     final yearBalance = finance.yearBalance;
@@ -251,7 +286,7 @@ class _DashboardState extends State<Dashboard> {
                     Row(
                       children: [
                         Text(
-                          'Balance — ${_monthsFull[month - 1]}',
+                          '${s.balance} — ${s.monthsFull[month - 1]}',
                           style: const TextStyle(
                               color: Colors.white70, fontSize: 13),
                         ),
@@ -278,7 +313,7 @@ class _DashboardState extends State<Dashboard> {
                             color: Colors.white38, size: 12),
                         const SizedBox(width: 4),
                         Text(
-                          'Anual: ${isYearPositive ? '+' : ''}${fmt.format(yearBalance)}',
+                          '${s.annual}: ${isYearPositive ? '+' : ''}${fmt.format(yearBalance)} ${settings.currency}',
                           style: const TextStyle(
                               color: Colors.white38, fontSize: 12),
                         ),
@@ -289,16 +324,55 @@ class _DashboardState extends State<Dashboard> {
                       children: [
                         _SummaryPill(
                           icon: Icons.arrow_upward_rounded,
-                          label: 'Ingresos',
+                          label: s.income,
                           value: fmt.format(monthData.income),
                           color: AppColors.incomeGreen,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MonthTypeDetail(
+                                month: month,
+                                year: finance.year,
+                                isIncome: true,
+                              ),
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         _SummaryPill(
                           icon: Icons.arrow_downward_rounded,
-                          label: 'Gastos',
-                          value: fmt.format(monthData.expenses),
+                          label: s.expenses,
+                          value: fmt.format(monthData.spending),
                           color: AppColors.expenseRed,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MonthTypeDetail(
+                                month: month,
+                                year: finance.year,
+                                isIncome: false,
+                                excludeCategory: kSavingsCategory,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _SummaryPill(
+                          icon: Icons.savings_outlined,
+                          label: s.savings,
+                          value: fmt.format(monthData.savings),
+                          color: AppColors.savingsBlue,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => MonthTypeDetail(
+                                month: month,
+                                year: finance.year,
+                                isIncome: false,
+                                category: kSavingsCategory,
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
@@ -316,19 +390,21 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _buildWeeklySummaryCard(List<WeekData> weeks, FinanceProvider finance) {
+    final settings = context.watch<SettingsProvider>();
+    final s = settings.strings;
     final week = weeks[_currentWeekIndex];
     // Use Thursday to determine the representative month (ISO standard)
     final thursday = week.start.add(const Duration(days: 3));
-    final monthName = _monthsFull[thursday.month - 1].toUpperCase();
+    final monthName = s.monthsFull[thursday.month - 1].toUpperCase();
     final year = thursday.year;
 
     // Week range label
     final startDay = week.start.day;
     final endDay = week.end.day;
-    final startMonth = _monthsFull[week.start.month - 1].toLowerCase();
-    final endMonth = _monthsFull[week.end.month - 1].toLowerCase();
+    final startMonth = s.monthsFull[week.start.month - 1].toLowerCase();
+    final endMonth = s.monthsFull[week.end.month - 1].toLowerCase();
     final rangeLabel = week.start.month == week.end.month
-        ? '$startDay — $endDay de $startMonth'
+        ? s.weekRangeSameMonth(startDay, endDay, startMonth)
         : '$startDay $startMonth — $endDay $endMonth';
 
     // Monthly balance for the representative month
@@ -358,7 +434,7 @@ class _DashboardState extends State<Dashboard> {
           Row(
             children: [
               Text(
-                'Balance — $monthName',
+                '${s.balance} — $monthName',
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const Spacer(),
@@ -397,16 +473,55 @@ class _DashboardState extends State<Dashboard> {
             children: [
               _SummaryPill(
                 icon: Icons.arrow_upward_rounded,
-                label: 'Ingresos',
+                label: s.income,
                 value: fmt.format(monthData.income),
                 color: AppColors.incomeGreen,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MonthTypeDetail(
+                      month: thursday.month,
+                      year: year,
+                      isIncome: true,
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _SummaryPill(
                 icon: Icons.arrow_downward_rounded,
-                label: 'Gastos',
-                value: fmt.format(monthData.expenses),
+                label: s.expenses,
+                value: fmt.format(monthData.spending),
                 color: AppColors.expenseRed,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MonthTypeDetail(
+                      month: thursday.month,
+                      year: year,
+                      isIncome: false,
+                      excludeCategory: kSavingsCategory,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _SummaryPill(
+                icon: Icons.savings_outlined,
+                label: '${s.savings} (${settings.currency})',
+                value: fmt.format(monthData.savings),
+                color: AppColors.savingsBlue,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => MonthTypeDetail(
+                      month: thursday.month,
+                      year: year,
+                      isIncome: false,
+                      category: kSavingsCategory,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -455,9 +570,9 @@ class _DashboardState extends State<Dashboard> {
     PageController? controller,
   ) {
     if (weeks.isEmpty || controller == null) {
-      return const Center(
+      return Center(
         child: Text(
-          'Sin datos',
+          context.watch<SettingsProvider>().strings.noData,
           style: TextStyle(color: AppColors.textSecondary),
         ),
       );
@@ -487,15 +602,16 @@ class _WeekMonthLabel extends StatelessWidget {
     required this.onPageChange,
   });
 
-  String get _label {
+  String _label(Strings s) {
     if (weeks.isEmpty) return '';
     final week = weeks[currentIndex];
     final thursday = week.start.add(const Duration(days: 3));
-    return '${_monthsFull[thursday.month - 1]} ${thursday.year}';
+    return '${s.monthsFull[thursday.month - 1]} ${thursday.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -513,8 +629,8 @@ class _WeekMonthLabel extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Text(
-            _label,
-            style: const TextStyle(
+            _label(s),
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 14,
               fontWeight: FontWeight.w600,
@@ -623,6 +739,7 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     final fmt = NumberFormat.compactCurrency(symbol: '\$', decimalDigits: 0);
     final dayNameColor =
         isToday ? AppColors.mintGreen : (isWeekend ? _weekendAmber : AppColors.textSecondary);
@@ -653,7 +770,7 @@ class _DayCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _dayNames[date.weekday - 1],
+                    s.daysShort[date.weekday - 1],
                     style: TextStyle(
                       color: dayNameColor,
                       fontSize: 11,
@@ -676,8 +793,8 @@ class _DayCard extends StatelessWidget {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 2),
                         child: Text(
-                          _monthsShort[date.month - 1],
-                          style: const TextStyle(
+                          s.monthsShort[date.month - 1],
+                          style: TextStyle(
                             color: AppColors.textSecondary,
                             fontSize: 10,
                           ),
@@ -760,7 +877,7 @@ class _YearSelector extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8),
           child: Text(
             '${finance.year}',
-            style: const TextStyle(
+            style: TextStyle(
               color: AppColors.textPrimary,
               fontSize: 16,
               fontWeight: FontWeight.w600,
@@ -772,6 +889,28 @@ class _YearSelector extends StatelessWidget {
           onTap: () => finance.loadYear(finance.year + 1),
         ),
       ],
+    );
+  }
+}
+
+class _CircleBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _CircleBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: AppColors.cardBg,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Icon(icon, color: AppColors.textSecondary, size: 16),
+      ),
     );
   }
 }
@@ -809,45 +948,56 @@ class _SummaryPill extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
   const _SummaryPill({
     required this.icon,
     required this.label,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.black26,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 16),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.black26,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(label,
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 11)),
+                    Text(
+                      value,
                       style: const TextStyle(
-                          color: Colors.white54, fontSize: 11)),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              if (onTap != null)
+                const Icon(
+                  Icons.chevron_right,
+                  color: Colors.white30,
+                  size: 14,
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -868,6 +1018,7 @@ class _MonthCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     final balance = monthData.balance;
     final isPositive = balance >= 0;
     final hasData = !monthData.isEmpty;
@@ -892,7 +1043,7 @@ class _MonthCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  _monthsShort[monthIndex],
+                  s.monthsShort[monthIndex],
                   style: TextStyle(
                     color: isCurrent
                         ? AppColors.mintGreen
@@ -909,8 +1060,8 @@ class _MonthCard extends StatelessWidget {
                       color: AppColors.primaryPurple.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Text(
-                      'HOY',
+                    child: Text(
+                      s.today,
                       style: TextStyle(
                           color: AppColors.mintGreen,
                           fontSize: 9,
@@ -945,9 +1096,17 @@ class _MonthCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 _MiniStat(
                   icon: Icons.arrow_downward_rounded,
-                  value: hasData ? fmt.format(monthData.expenses) : '-',
+                  value: hasData ? fmt.format(monthData.spending) : '-',
                   color: AppColors.expenseRed,
                 ),
+                if (hasData && monthData.savings > 0) ...[
+                  const SizedBox(width: 8),
+                  _MiniStat(
+                    icon: Icons.savings_outlined,
+                    value: fmt.format(monthData.savings),
+                    color: AppColors.savingsBlue,
+                  ),
+                ],
               ],
             ),
           ],

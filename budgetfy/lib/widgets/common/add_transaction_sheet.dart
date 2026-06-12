@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import '../../core/app_theme.dart';
 import '../../models/transaction.dart';
 import '../../providers/finance_provider.dart';
+import '../../providers/settings_provider.dart';
 
 const _incomeCategories = ['Salario', 'Freelance', 'Inversión', 'Bono', 'Otro'];
 const _expenseCategories = [
@@ -14,6 +16,7 @@ const _expenseCategories = [
   'Compras',
   'Educación',
   'Servicios',
+  kSavingsCategory,
   'Otro',
 ];
 
@@ -110,7 +113,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
       lastDate: DateTime(2030),
       builder: (context, child) => Theme(
         data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.dark(
+          colorScheme: ColorScheme.dark(
             primary: AppColors.primaryPurple,
             surface: AppColors.cardBg,
           ),
@@ -127,7 +130,10 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
 
     if (desc.isEmpty || amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Completa todos los campos correctamente')),
+        SnackBar(
+          content:
+              Text(context.read<SettingsProvider>().strings.fillAllFields),
+        ),
       );
       return;
     }
@@ -164,31 +170,32 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
   }
 
   Future<void> _confirmDelete() async {
+    final s = context.read<SettingsProvider>().strings;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surfaceBg,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
-          'Eliminar transacción',
+        title: Text(
+          s.deleteTransaction,
           style: TextStyle(color: AppColors.textPrimary),
         ),
-        content: const Text(
-          '¿Estás seguro de que quieres eliminar esta transacción?',
+        content: Text(
+          s.deleteTransactionConfirm,
           style: TextStyle(color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancelar',
+            child: Text(
+              s.cancel,
               style: TextStyle(color: AppColors.textSecondary),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              'Eliminar',
+            child: Text(
+              s.delete,
               style: TextStyle(color: AppColors.expenseRed),
             ),
           ),
@@ -205,13 +212,14 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     final categories = _isIncome ? _incomeCategories : _expenseCategories;
     final bottomPadding = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surfaceBg,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.fromLTRB(24, 20, 24, 24 + bottomPadding),
       child: SingleChildScrollView(
@@ -231,8 +239,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             ),
             const SizedBox(height: 20),
             Text(
-              _isEditMode ? 'Editar Transacción' : 'Agregar Transacción',
-              style: const TextStyle(
+              _isEditMode ? s.editTransaction : s.newTransaction,
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -243,8 +251,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
             const SizedBox(height: 20),
             TextField(
               controller: _descController,
-              style: const TextStyle(color: AppColors.textPrimary),
-              decoration: const InputDecoration(labelText: 'Descripción'),
+              style: TextStyle(color: AppColors.textPrimary),
+              decoration: InputDecoration(labelText: s.description),
             ),
             const SizedBox(height: 12),
             TextField(
@@ -253,13 +261,13 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
               ],
-              style: const TextStyle(
+              style: TextStyle(
                 color: AppColors.textPrimary,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
-              decoration: const InputDecoration(
-                labelText: 'Monto',
+              decoration: InputDecoration(
+                labelText: s.amount,
                 prefixText: '\$ ',
                 prefixStyle: TextStyle(
                   color: AppColors.textSecondary,
@@ -289,8 +297,8 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               ),
             ],
             const SizedBox(height: 16),
-            const Text(
-              'Categoría',
+            Text(
+              s.category,
               style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 8),
@@ -300,9 +308,10 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
               children: categories
                   .map(
                     (cat) => _CategoryChip(
-                      label: cat,
+                      label: s.categoryLabel(cat),
                       selected: cat == _selectedCategory,
                       isIncome: _isIncome,
+                      isSavings: cat == kSavingsCategory,
                       onTap: () => setState(() => _selectedCategory = cat),
                     ),
                   )
@@ -332,7 +341,7 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(
-                        _isEditMode ? 'Actualizar' : 'Guardar',
+                        _isEditMode ? s.update : s.save,
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -346,13 +355,13 @@ class _AddTransactionSheetState extends State<AddTransactionSheet> {
                 width: double.infinity,
                 child: TextButton.icon(
                   onPressed: _saving ? null : _confirmDelete,
-                  icon: const Icon(
+                  icon: Icon(
                     Icons.delete_outline,
                     color: AppColors.expenseRed,
                     size: 18,
                   ),
-                  label: const Text(
-                    'Eliminar transacción',
+                  label: Text(
+                    s.deleteTransaction,
                     style: TextStyle(color: AppColors.expenseRed),
                   ),
                 ),
@@ -375,6 +384,7 @@ class _TypeToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = context.watch<SettingsProvider>().strings;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardBg,
@@ -384,14 +394,14 @@ class _TypeToggle extends StatelessWidget {
       child: Row(
         children: [
           _ToggleOption(
-            label: 'Gasto',
+            label: s.expenseToggle,
             icon: Icons.arrow_downward_rounded,
             selected: !isIncome,
             color: AppColors.expenseRed,
             onTap: () => onToggle(false),
           ),
           _ToggleOption(
-            label: 'Ingreso',
+            label: s.incomeToggle,
             icon: Icons.arrow_upward_rounded,
             selected: isIncome,
             color: AppColors.incomeGreen,
@@ -462,14 +472,9 @@ class _DateField extends StatelessWidget {
 
   const _DateField({required this.date, required this.onTap});
 
-  static const _months = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-  ];
-
   @override
   Widget build(BuildContext context) {
-    final label = '${date.day} de ${_months[date.month - 1]} ${date.year}';
+    final label = context.watch<SettingsProvider>().strings.longDate(date);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -480,12 +485,12 @@ class _DateField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(Icons.calendar_today_outlined,
+            Icon(Icons.calendar_today_outlined,
                 color: AppColors.textSecondary, size: 18),
             const SizedBox(width: 12),
             Text(
               label,
-              style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+              style: TextStyle(color: AppColors.textPrimary, fontSize: 15),
             ),
           ],
         ),
@@ -530,7 +535,7 @@ class _RecurringToggle extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Recurrente',
+                context.watch<SettingsProvider>().strings.recurrente,
                 style: TextStyle(
                   color: value ? AppColors.textPrimary : AppColors.textSecondary,
                   fontWeight: FontWeight.w600,
@@ -559,16 +564,17 @@ class _RecurringToggle extends StatelessWidget {
 
 // ─── Recurring options (expanded when toggle is on) ───────────────────────────
 
-String _recurringLabel(RecurringType type) {
+String _recurringLabel(BuildContext context, RecurringType type) {
+  final s = context.read<SettingsProvider>().strings;
   switch (type) {
     case RecurringType.daily:
-      return 'Diario';
+      return s.isEn ? 'Daily' : 'Diario';
     case RecurringType.weekly:
-      return 'Semanal';
+      return s.weekly;
     case RecurringType.monthly:
-      return 'Mensual';
+      return s.monthly;
     case RecurringType.custom:
-      return 'Personalizado';
+      return s.custom;
   }
 }
 
@@ -612,7 +618,7 @@ class _RecurringOptions extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      _recurringLabel(type),
+                      _recurringLabel(context, type),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: selected
@@ -634,8 +640,8 @@ class _RecurringOptions extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              const Text(
-                'Cada',
+              Text(
+                context.watch<SettingsProvider>().strings.every,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
               const SizedBox(width: 10),
@@ -647,7 +653,7 @@ class _RecurringOptions extends StatelessWidget {
                   keyboardType: TextInputType.number,
                   inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.bold,
                   ),
@@ -663,8 +669,8 @@ class _RecurringOptions extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                'días',
+              Text(
+                context.watch<SettingsProvider>().strings.days,
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
             ],
@@ -682,18 +688,22 @@ class _CategoryChip extends StatelessWidget {
   final String label;
   final bool selected;
   final bool isIncome;
+  final bool isSavings;
   final VoidCallback onTap;
 
   const _CategoryChip({
     required this.label,
     required this.selected,
     required this.isIncome,
+    this.isSavings = false,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isIncome ? AppColors.incomeGreen : AppColors.primaryPurple;
+    final color = isSavings
+        ? AppColors.savingsBlue
+        : (isIncome ? AppColors.incomeGreen : AppColors.primaryPurple);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(

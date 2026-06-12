@@ -1,4 +1,5 @@
 import 'package:budgetfy/providers/finance_provider.dart';
+import 'package:budgetfy/providers/settings_provider.dart';
 import 'package:budgetfy/screens/layout.dart';
 import 'package:budgetfy/screens/splash.dart';
 import 'package:budgetfy/widgets/welcome/welcome.dart';
@@ -8,26 +9,34 @@ import 'package:provider/provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const MyApp());
+  final settings = SettingsProvider();
+  await settings.load();
+  runApp(MyApp(settings: settings));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final SettingsProvider settings;
+  const MyApp({super.key, required this.settings});
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => FinanceProvider(),
-      child: MaterialApp(
-        debugShowCheckedModeBanner: false,
-        title: 'Budgetfy',
-        theme: AppTheme.dark,
-        initialRoute: '/',
-        routes: {
-          '/': (context) => const Splash(),
-          '/welcome': (context) => const Welcome(),
-          '/dashboard': (context) => const Layout(),
-        },
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: settings),
+        ChangeNotifierProvider(create: (_) => FinanceProvider()),
+      ],
+      child: Consumer<SettingsProvider>(
+        builder: (context, s, _) => MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'Budgetfy',
+          theme: s.isDark ? AppTheme.dark : AppTheme.light,
+          initialRoute: '/',
+          routes: {
+            '/': (context) => const Splash(),
+            '/welcome': (context) => const Welcome(),
+            '/dashboard': (context) => const Layout(),
+          },
+        ),
       ),
     );
   }

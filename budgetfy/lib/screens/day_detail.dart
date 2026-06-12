@@ -4,31 +4,94 @@ import 'package:provider/provider.dart';
 import '../core/app_theme.dart';
 import '../models/transaction.dart';
 import '../providers/finance_provider.dart';
+import '../providers/settings_provider.dart';
 import '../widgets/common/add_transaction_sheet.dart';
-
-const _daysFull = [
-  'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo',
-];
-const _monthsFullDD = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
 
 const _neutralBlue = Color(0xFF3D7BF4);
 
 class DayDetail extends StatefulWidget {
   final DateTime date;
-  const DayDetail({super.key, required this.date});
+  final bool initialShowIncome;
+  const DayDetail({super.key, required this.date, this.initialShowIncome = true});
 
   @override
   State<DayDetail> createState() => _DayDetailState();
 }
 
 class _DayDetailState extends State<DayDetail> {
-  bool _showIncome = true;
+  late bool _showIncome = widget.initialShowIncome;
+  final Set<int> _selectedIds = {};
+
+  bool get _selectionMode => _selectedIds.isNotEmpty;
+
+  void _toggleSelection(int id) {
+    setState(() {
+      if (!_selectedIds.remove(id)) _selectedIds.add(id);
+    });
+  }
+
+  Future<bool> _confirmDelete(int count) async {
+    final s = context.read<SettingsProvider>().strings;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.cardBg,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Text(
+          s.deleteMovementsTitle,
+          style: TextStyle(color: AppColors.textPrimary, fontSize: 18),
+        ),
+        content: Text(
+          s.deleteMovementsBody(count),
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              s.cancel,
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              s.delete,
+              style: TextStyle(
+                color: AppColors.expenseRed,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
+  Future<void> _deleteSelected(FinanceProvider finance) async {
+    final ids = _selectedIds.toList();
+    if (ids.isEmpty) return;
+    if (!await _confirmDelete(ids.length)) return;
+    setState(() => _selectedIds.clear());
+    await finance.deleteMany(ids);
+  }
+
+  Future<void> _deleteAll(
+      FinanceProvider finance, List<Transaction> txs) async {
+    final ids = txs.map((t) => t.id).whereType<int>().toList();
+    if (ids.isEmpty) return;
+    if (!await _confirmDelete(ids.length)) return;
+    setState(() => _selectedIds.clear());
+    await finance.deleteMany(ids);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final s = settings.strings;
     return Consumer<FinanceProvider>(
       builder: (context, finance, _) {
         final date = widget.date;
@@ -45,6 +108,9 @@ class _DayDetailState extends State<DayDetail> {
         final expenses = allDayTxs
             .where((t) => !t.isIncome)
             .fold(0.0, (s, t) => s + t.amount);
+        final savings = allDayTxs
+            .where((t) => !t.isIncome && t.category == kSavingsCategory)
+            .fold(0.0, (s, t) => s + t.amount);
         final balance = income - expenses;
 
         final filteredTxs =
@@ -52,19 +118,33 @@ class _DayDetailState extends State<DayDetail> {
 
         return Scaffold(
           backgroundColor: AppColors.darkBg,
-          appBar: AppBar(
-            backgroundColor: AppColors.darkBg,
-            leading: IconButton(
-              icon: const Icon(
-                Icons.arrow_back_ios_new_rounded,
-                color: AppColors.textPrimary,
-              ),
-              onPressed: () => Navigator.pop(context),
-            ),
-          ),
+          appBar: _selectionMode
+              ? _buildSelectionAppBar(finance, filteredTxs)
+              : AppBar(
+                  backgroundColor: AppColors.darkBg,
+                  leading: IconButton(
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: AppColors.textPrimary,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  actions: [
+                    if (filteredTxs.isNotEmpty)
+                      IconButton(
+                        tooltip: s.deleteAllTooltip,
+                        icon: Icon(
+                          Icons.delete_sweep_outlined,
+                          color: AppColors.expenseRed,
+                        ),
+                        onPressed: () => _deleteAll(finance, filteredTxs),
+                      ),
+                  ],
+                ),
           body: Column(
             children: [
-              _buildDaySummaryCard(date, balance, income, expenses),
+              _buildDaySummaryCard(
+                  settings, date, balance, income, expenses, savings),
               const SizedBox(height: 14),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -76,28 +156,79 @@ class _DayDetailState extends State<DayDetail> {
               ),
             ],
           ),
-          floatingActionButton: FloatingActionButton(
-            onPressed: () => AddTransactionSheet.show(
-              context,
-              finance,
-              initialDate: date,
-            ),
-            backgroundColor:
-                _showIncome ? AppColors.incomeGreen : AppColors.expenseRed,
-            foregroundColor: _showIncome ? AppColors.darkBg : Colors.white,
-            child: const Icon(Icons.add),
-          ),
+          floatingActionButton: _selectionMode
+              ? null
+              : FloatingActionButton(
+                  onPressed: () => AddTransactionSheet.show(
+                    context,
+                    finance,
+                    initialDate: date,
+                  ),
+                  backgroundColor: _showIncome
+                      ? AppColors.incomeGreen
+                      : AppColors.expenseRed,
+                  foregroundColor:
+                      _showIncome ? AppColors.darkBg : Colors.white,
+                  child: const Icon(Icons.add),
+                ),
         );
       },
     );
   }
 
-  Widget _buildDaySummaryCard(
-      DateTime date, double balance, double income, double expenses) {
+  AppBar _buildSelectionAppBar(
+      FinanceProvider finance, List<Transaction> filteredTxs) {
+    final s = context.read<SettingsProvider>().strings;
+    final allSelected = filteredTxs.isNotEmpty &&
+        filteredTxs.every((t) => _selectedIds.contains(t.id));
+
+    return AppBar(
+      backgroundColor: AppColors.darkBg,
+      leading: IconButton(
+        icon: Icon(Icons.close, color: AppColors.textPrimary),
+        tooltip: s.cancelSelection,
+        onPressed: () => setState(() => _selectedIds.clear()),
+      ),
+      title: Text(
+        s.selectedCount(_selectedIds.length),
+        style: TextStyle(
+          color: AppColors.textPrimary,
+          fontSize: 16,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      actions: [
+        IconButton(
+          tooltip: allSelected ? s.deselectAll : s.selectAll,
+          icon: Icon(
+            allSelected ? Icons.deselect : Icons.select_all,
+            color: AppColors.textPrimary,
+          ),
+          onPressed: () => setState(() {
+            if (allSelected) {
+              _selectedIds.clear();
+            } else {
+              _selectedIds
+                  .addAll(filteredTxs.map((t) => t.id).whereType<int>());
+            }
+          }),
+        ),
+        IconButton(
+          tooltip: s.deleteSelected,
+          icon: Icon(Icons.delete_outline, color: AppColors.expenseRed),
+          onPressed: () => _deleteSelected(finance),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDaySummaryCard(SettingsProvider settings, DateTime date,
+      double balance, double income, double expenses, double savings) {
+    final s = settings.strings;
     final isPositive = balance > 0;
     final isNeutral = balance == 0;
     final fmt = NumberFormat.currency(symbol: '\$', decimalDigits: 2);
-    final dayName = _daysFull[date.weekday - 1];
+    final dayName = s.daysFull[date.weekday - 1];
 
     final Color themeColor = isNeutral
         ? _neutralBlue
@@ -123,7 +254,7 @@ class _DayDetailState extends State<DayDetail> {
           Row(
             children: [
               Text(
-                'Balance — $dayName',
+                '${s.balance} — $dayName',
                 style: const TextStyle(color: Colors.white70, fontSize: 13),
               ),
               const Spacer(),
@@ -147,7 +278,7 @@ class _DayDetailState extends State<DayDetail> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${date.day} de ${_monthsFullDD[date.month - 1]} ${date.year}',
+            s.longDate(date),
             style: const TextStyle(color: Colors.white38, fontSize: 12),
           ),
           const SizedBox(height: 16),
@@ -155,16 +286,23 @@ class _DayDetailState extends State<DayDetail> {
             children: [
               _DaySummaryPill(
                 icon: Icons.arrow_upward_rounded,
-                label: 'Ingresos',
+                label: s.income,
                 value: fmt.format(income),
                 color: AppColors.incomeGreen,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 8),
               _DaySummaryPill(
                 icon: Icons.arrow_downward_rounded,
-                label: 'Gastos',
-                value: fmt.format(expenses),
+                label: s.expenses,
+                value: fmt.format(expenses - savings),
                 color: AppColors.expenseRed,
+              ),
+              const SizedBox(width: 8),
+              _DaySummaryPill(
+                icon: Icons.savings_outlined,
+                label: '${s.savings} (${settings.currency})',
+                value: fmt.format(savings),
+                color: AppColors.savingsBlue,
               ),
             ],
           ),
@@ -174,6 +312,7 @@ class _DayDetailState extends State<DayDetail> {
   }
 
   Widget _buildToggle() {
+    final s = context.watch<SettingsProvider>().strings;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.cardBg,
@@ -183,18 +322,24 @@ class _DayDetailState extends State<DayDetail> {
       child: Row(
         children: [
           _DayToggleOption(
-            label: 'Ingreso',
+            label: s.incomeSingular,
             icon: Icons.arrow_upward_rounded,
             selected: _showIncome,
             color: AppColors.incomeGreen,
-            onTap: () => setState(() => _showIncome = true),
+            onTap: () => setState(() {
+              _showIncome = true;
+              _selectedIds.clear();
+            }),
           ),
           _DayToggleOption(
-            label: 'Egreso',
+            label: s.expenseSingular,
             icon: Icons.arrow_downward_rounded,
             selected: !_showIncome,
             color: AppColors.expenseRed,
-            onTap: () => setState(() => _showIncome = false),
+            onTap: () => setState(() {
+              _showIncome = false;
+              _selectedIds.clear();
+            }),
           ),
         ],
       ),
@@ -203,6 +348,7 @@ class _DayDetailState extends State<DayDetail> {
 
   Widget _buildTransactionList(
       List<Transaction> txs, FinanceProvider finance) {
+    final s = context.watch<SettingsProvider>().strings;
     if (txs.isEmpty) {
       return Center(
         child: Column(
@@ -216,17 +362,15 @@ class _DayDetailState extends State<DayDetail> {
               color: AppColors.divider,
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Sin movimientos',
+            Text(
+              s.noMovements,
               style:
                   TextStyle(color: AppColors.textSecondary, fontSize: 15),
             ),
             const SizedBox(height: 4),
             Text(
-              _showIncome
-                  ? 'No hay ingresos registrados'
-                  : 'No hay gastos registrados',
-              style: const TextStyle(color: AppColors.divider, fontSize: 12),
+              _showIncome ? s.noIncomeRegistered : s.noExpensesRegistered,
+              style: TextStyle(color: AppColors.divider, fontSize: 12),
             ),
           ],
         ),
@@ -236,8 +380,21 @@ class _DayDetailState extends State<DayDetail> {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 100),
       itemCount: txs.length,
-      itemBuilder: (context, i) =>
-          _DayTxTile(transaction: txs[i], finance: finance),
+      itemBuilder: (context, i) {
+        final tx = txs[i];
+        return _DayTxTile(
+          transaction: tx,
+          finance: finance,
+          selectionMode: _selectionMode,
+          selected: tx.id != null && _selectedIds.contains(tx.id),
+          onLongPress: () {
+            if (tx.id != null && !_selectionMode) _toggleSelection(tx.id!);
+          },
+          onSelectionToggle: () {
+            if (tx.id != null) _toggleSelection(tx.id!);
+          },
+        );
+      },
     );
   }
 }
@@ -354,7 +511,19 @@ class _DayToggleOption extends StatelessWidget {
 class _DayTxTile extends StatelessWidget {
   final Transaction transaction;
   final FinanceProvider finance;
-  const _DayTxTile({required this.transaction, required this.finance});
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback onLongPress;
+  final VoidCallback onSelectionToggle;
+
+  const _DayTxTile({
+    required this.transaction,
+    required this.finance,
+    required this.selectionMode,
+    required this.selected,
+    required this.onLongPress,
+    required this.onSelectionToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -364,7 +533,8 @@ class _DayTxTile extends StatelessWidget {
 
     return Dismissible(
       key: ValueKey(transaction.id),
-      direction: DismissDirection.endToStart,
+      direction:
+          selectionMode ? DismissDirection.none : DismissDirection.endToStart,
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
@@ -372,7 +542,7 @@ class _DayTxTile extends StatelessWidget {
           color: AppColors.expenseRed.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(12),
         ),
-        child: const Icon(Icons.delete_outline, color: AppColors.expenseRed),
+        child: Icon(Icons.delete_outline, color: AppColors.expenseRed),
       ),
       onDismissed: (_) {
         if (transaction.id != null) finance.delete(transaction.id!);
@@ -382,18 +552,29 @@ class _DayTxTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
-          onTap: () => AddTransactionSheet.show(
-            context,
-            finance,
-            initialTransaction: transaction,
-          ),
-          child: Container(
+          onLongPress: onLongPress,
+          onTap: selectionMode
+              ? onSelectionToggle
+              : () => AddTransactionSheet.show(
+                    context,
+                    finance,
+                    initialTransaction: transaction,
+                  ),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.07),
+              color: selected
+                  ? AppColors.primaryPurple.withValues(alpha: 0.2)
+                  : color.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withValues(alpha: 0.18)),
+              border: Border.all(
+                color: selected
+                    ? AppColors.primaryPurple
+                    : color.withValues(alpha: 0.18),
+                width: selected ? 1.5 : 1.0,
+              ),
             ),
             child: Row(
               children: [
@@ -401,14 +582,18 @@ class _DayTxTile extends StatelessWidget {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
+                    color: selected
+                        ? AppColors.primaryPurple.withValues(alpha: 0.3)
+                        : color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
-                    transaction.isIncome
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded,
-                    color: color,
+                    selected
+                        ? Icons.check_rounded
+                        : (transaction.isIncome
+                            ? Icons.arrow_upward_rounded
+                            : Icons.arrow_downward_rounded),
+                    color: selected ? AppColors.mintGreen : color,
                     size: 18,
                   ),
                 ),
@@ -419,18 +604,33 @@ class _DayTxTile extends StatelessWidget {
                     children: [
                       Text(
                         transaction.description,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      Text(
-                        transaction.category,
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 12,
-                        ),
+                      Row(
+                        children: [
+                          if (transaction.isRecurring) ...[
+                            Icon(
+                              Icons.repeat_rounded,
+                              color: AppColors.textSecondary,
+                              size: 11,
+                            ),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            context
+                                .watch<SettingsProvider>()
+                                .strings
+                                .categoryLabel(transaction.category),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -445,9 +645,15 @@ class _DayTxTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 4),
                 Icon(
-                  Icons.edit_outlined,
-                  color: AppColors.divider,
-                  size: 14,
+                  selectionMode
+                      ? (selected
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked)
+                      : Icons.edit_outlined,
+                  color: selected
+                      ? AppColors.primaryPurple
+                      : AppColors.divider,
+                  size: selectionMode ? 18 : 14,
                 ),
               ],
             ),

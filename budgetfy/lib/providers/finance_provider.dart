@@ -39,9 +39,30 @@ class MonthData {
       .where((t) => !t.isIncome)
       .fold(0.0, (sum, t) => sum + t.amount);
 
+  /// Egresos con categoría Ahorro: restan del balance (no están disponibles)
+  /// pero se muestran aparte de los gastos.
+  double get savings => transactions
+      .where((t) => !t.isIncome && t.category == kSavingsCategory)
+      .fold(0.0, (sum, t) => sum + t.amount);
+
+  /// Gastos reales, sin contar el ahorro.
+  double get spending => expenses - savings;
+
   double get balance => income - expenses;
 
   bool get isEmpty => transactions.isEmpty;
+}
+
+/// Serie recurrente: todas las instancias generadas por un mismo movimiento
+/// recurrente (agrupadas por descripción, monto, tipo y frecuencia).
+class RecurringGroup {
+  final Transaction sample;
+  final List<Transaction> instances;
+
+  const RecurringGroup({required this.sample, required this.instances});
+
+  int get count => instances.length;
+  double get total => instances.fold(0.0, (s, t) => s + t.amount);
 }
 
 class FinanceProvider extends ChangeNotifier {
@@ -113,8 +134,12 @@ class FinanceProvider extends ChangeNotifier {
 
   Future<void> add(Transaction t) async {
     if (t.isRecurring) {
+      final groupId =
+          t.recurringGroupId ?? DatabaseService.newRecurringGroupId();
       for (final date in _recurringDates(t)) {
-        await DatabaseService.insertTransaction(t.copyWith(date: date));
+        await DatabaseService.insertTransaction(
+          t.copyWith(date: date, recurringGroupId: groupId),
+        );
       }
     } else {
       await DatabaseService.insertTransaction(t);
@@ -173,6 +198,39 @@ class FinanceProvider extends ChangeNotifier {
 
   Future<void> delete(int id) async {
     await DatabaseService.deleteTransaction(id);
+    await loadYear(_year);
+  }
+
+  Future<void> deleteMany(List<int> ids) async {
+    await DatabaseService.deleteTransactions(ids);
+    await loadYear(_year);
+  }
+
+  /// Series recurrentes del año cargado, agrupadas por su group id. Las filas
+  /// legadas sin group id se agrupan por sus campos comunes.
+  List<RecurringGroup> get recurringGroups {
+    final Map<String, List<Transaction>> map = {};
+    for (final t in _transactions.where((t) => t.isRecurring)) {
+      final key = t.recurringGroupId ??
+          'legacy|${t.description}|${t.amount}|${t.isIncome}|'
+              '${t.recurringType.name}|${t.category}';
+      map.putIfAbsent(key, () => []).add(t);
+    }
+    final groups = map.values
+        .map((txs) {
+          txs.sort((a, b) => a.date.compareTo(b.date));
+          return RecurringGroup(sample: txs.first, instances: txs);
+        })
+        .toList()
+      ..sort((a, b) => a.sample.description
+          .toLowerCase()
+          .compareTo(b.sample.description.toLowerCase()));
+    return groups;
+  }
+
+  /// Elimina todas las instancias de una serie recurrente.
+  Future<void> deleteRecurringSeries(Transaction sample) async {
+    await DatabaseService.deleteRecurringSeries(sample);
     await loadYear(_year);
   }
 }
